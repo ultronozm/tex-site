@@ -86,9 +86,10 @@ live Pages branch.
 
 ## Known Tradeoffs
 
-- The default workflow uses the current TeX Live provided by
-  `TeX-Live/setup-texlive-action`.  Pin `version:` in the workflow if a
-  downstream site needs bit-for-bit parity with an older toolchain.
+- The default workflow pins TeX Live to 2025.  Unpinning to the current TeX
+  Live was tested on 2026-07-05 and the cold setup path took about twenty
+  minutes before compilation, so the known-fast cached toolchain remains the
+  default.
 - The workflow strips `tocindent` labels from carried `.aux` files before
   compiling.  This avoids an `amsart`/`xr` interaction where imported
   `tocindent` labels can break another document's sectioning commands.
