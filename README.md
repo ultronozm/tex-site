@@ -13,16 +13,19 @@ index organization.
 - GitHub Actions snapshot deployment to a `deploy` branch.
 - Cached TeX Live + `latexmk` PDF builds.
 - Pandoc HTML conversion with Emacs postprocessing.
+- Org note HTML export with the same site chrome.
 - `listing.json` generation from note titles, abstracts, and git dates.
 - A DataTables-based `index.org` template.
 - Cross-document `xr` support by carrying `.aux` files on the deploy branch.
+- A warning-only TeX link report for missing aux files and dangling refs.
 
 ## Downstream Setup
 
 1. Fork or otherwise copy this repository into a notes repository.
 2. Keep this repository as an `upstream` remote so machinery changes can be
    merged later.
-3. Add notes as top-level `*.tex` files.
+3. Add notes as top-level `*.tex` or `*.org` files.  `index.org` is reserved
+   for the site index template.
 4. Put non-standalone TeX inputs such as `common.tex`, body files, and test
    scaffolds in `config.json` under `exclude`.
 5. Set `site.githubRepository` in `config.json` to `OWNER/REPO` if generated
@@ -67,8 +70,10 @@ The `build` workflow reconstructs the deploy branch as a snapshot:
 2. Carry forward existing `*.pdf`, `*.html`, `*.aux`, and `listing.json` from
    `deploy`, if the branch already exists.
 3. Rebuild changed notes and their dependents.
-4. Force-push `deploy` as a fresh snapshot.
-5. Run `make-index` on the deploy branch to refresh `listing.json` and
+4. Export changed Org notes.
+5. Report missing aux files and dangling TeX references in the Actions summary.
+6. Force-push `deploy` as a fresh snapshot.
+7. Run `make-index` on the deploy branch to refresh `listing.json` and
    `index.html`.
 
 The force-push is deliberate: the deploy branch is generated state, not
@@ -81,11 +86,13 @@ live Pages branch.
 
 ## Known Tradeoffs
 
-- TeX Live is pinned to 2025 in the default workflow.  Downstream sites can
-  unpin after testing their corpus.
+- The default workflow uses the current TeX Live provided by
+  `TeX-Live/setup-texlive-action`.  Pin `version:` in the workflow if a
+  downstream site needs bit-for-bit parity with an older toolchain.
 - The workflow strips `tocindent` labels from carried `.aux` files before
   compiling.  This avoids an `amsart`/`xr` interaction where imported
   `tocindent` labels can break another document's sectioning commands.
-- Missing external aux files are currently treated as conversion errors by
-  `tex2html.el`.  A future hardening pass should degrade dangling links to
-  visible `??` markers and report them in CI.
+- Missing external aux files are warnings.  HTML conversion leaves visible
+  `??` markers when a number cannot be resolved, and CI reports the missing
+  aux file or dangling reference without breaking the deploy snapshot by
+  itself.
