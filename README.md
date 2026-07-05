@@ -39,6 +39,21 @@ lowest-friction upstream merge path, keep local customization in content files
 and avoid unnecessary edits to `.github/workflows/*.yml`, `compile.sh`,
 `convert.sh`, `make-index.sh`, and `tex2html.el`.
 
+## Updating a Child Site
+
+When this parent changes, update a child repository with an ordinary upstream
+merge:
+
+```sh
+git fetch upstream
+git merge upstream/main
+```
+
+The child repository can have its own `README.md`.  Treat that file as
+child-owned documentation; if an upstream merge conflicts there, keep the
+child version unless you deliberately want to copy a parent documentation
+change downstream.
+
 ## Standalone Notes
 
 Each top-level `*.tex` note should compile on its own and provide a title.
