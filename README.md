@@ -26,8 +26,9 @@ index organization.
    merged later.
 3. Add notes as top-level `*.tex` or `*.org` files.  `index.org` is reserved
    for the site index template.
-4. Put non-standalone TeX inputs such as `common.tex`, body files, and test
-   scaffolds in `config.json` under `exclude`.
+4. Put top-level non-standalone TeX inputs in `config.json` under `exclude`.
+   TeX files in subdirectories are not treated as publishable notes by
+   default.
 5. Set `site.githubRepository` in `config.json` to `OWNER/REPO` if generated
    HTML pages should link to source history.
 6. Enable GitHub Pages from the `deploy` branch, root directory.
@@ -38,13 +39,14 @@ lowest-friction upstream merge path, keep local customization in content files
 and avoid unnecessary edits to `.github/workflows/*.yml`, `compile.sh`,
 `convert.sh`, `make-index.sh`, and `tex2html.el`.
 
-## Required Note Shape
+## Standalone Notes
 
-Each standalone note should compile with:
+Each top-level `*.tex` note should compile on its own and provide a title.
+An abstract is optional, but if present it is shown in `listing.json` and the
+index page.
 
 ```tex
 \documentclass[reqno]{amsart}
-\input{common.tex}
 
 \begin{document}
 
@@ -59,8 +61,34 @@ Each standalone note should compile with:
 \end{document}
 ```
 
-`common.tex` is intentionally not supplied by the parent.  Each downstream site
-has its own packages, macros, bibliography conventions, and local style.
+Each top-level `*.org` note is exported to HTML and listed from its
+`#+TITLE:`.  `#+DESCRIPTION:` is used as the listing abstract when present.
+
+## Non-Standalone TeX
+
+The build treats top-level `*.tex` files as candidate notes.  If a top-level
+file is only an input to another document, exclude it:
+
+```json
+{
+  "exclude": [
+    "master-body.tex",
+    "scratch-test.tex"
+  ]
+}
+```
+
+For a master document split into several files, either keep the included files
+outside the top level, such as:
+
+```text
+master.tex
+sections/introduction.tex
+sections/proof.tex
+```
+
+or keep them top-level and list the included files in `exclude`.  In both
+cases, `master.tex` is the publishable note.
 
 ## Deployment Model
 

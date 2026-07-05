@@ -134,8 +134,8 @@ jobs:
               fi
             done
           }
-          ALL=$(git ls-files '*.tex' | filter_excludes || true)
-          ALL_ORG=$(git ls-files '*.org' | grep -vx 'index.org' | filter_excludes || true)
+          ALL=$(git ls-files '*.tex' | awk '!/\//' | filter_excludes || true)
+          ALL_ORG=$(git ls-files '*.org' | awk '!/\//' | grep -vx 'index.org' | filter_excludes || true)
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" = "main" ]; then
             CHANGED=$(git diff --name-only --diff-filter=d "${{ github.event.before }}" "${{ github.event.after }}" -- '*.tex' '*.bib' || true)
             FILES=""
