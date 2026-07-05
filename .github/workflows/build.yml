@@ -1,0 +1,211 @@
+name: build
+#
+# Design:
+#  - deploy is a *snapshot* branch: each run reconstructs it as
+#    main + artifact overlay and force-pushes a single commit.
+#    No rebase, no conflicts, no accumulated artifact history.
+#    Permanent URLs are preserved because file paths never change.
+#  - A failed compile keeps the previous artifact (site never
+#    regresses) and marks the run failed with a summary.
+#  - TeX Live is cached between runs (setup-texlive-action).
+on:
+  workflow_dispatch:
+    inputs:
+      rebuild_all:
+        description: "Rebuild all tex files (otherwise only those missing artifacts)"
+        type: boolean
+        default: false
+      force:
+        description: "Space-separated tex files to rebuild regardless of change detection"
+        type: string
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - '**/*.tex'
+      - '**/*.bib'
+      - '**/*.css'
+      - '**/*.el'
+      - '.github/workflows/build.yml'
+      - 'compile.sh'
+      - 'config.json'
+      - 'convert.sh'
+      - 'index.org'
+      - 'tex2html.el'
+
+permissions:
+  contents: write
+
+# Serialize runs: concurrent builds would race on force-pushing deploy.
+concurrency:
+  group: build-deploy
+  cancel-in-progress: false
+
+env:
+  # Branch the snapshot is pushed to.
+  DEPLOY_BRANCH: deploy
+  # Space-separated tex files to rebuild regardless of change detection.
+  FORCE_REBUILD: ${{ inputs.force || '' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Carry forward artifacts from previous deploy
+        run: |
+          if git fetch origin "$DEPLOY_BRANCH"; then
+            # One restore per pattern: git restore aborts ALL pathspecs if
+            # any single one matches nothing, which must not take the others
+            # down. aux files are needed at build time for xr
+            # (\externaldocument) cross-document references.
+            for pat in '*.pdf' '*.html' '*.aux' 'listing.json'; do
+              git restore --overlay --source="origin/$DEPLOY_BRANCH" -- "$pat" || true
+            done
+            # amsart records toc indentation as ordinary labels
+            # (\newlabel{tocindentN}{...}); importing those via xr/xr-hyper
+            # breaks the importing document ("Missing number, treated as
+            # zero"). They only matter to the note's own recompile, which
+            # latexmk -gg regenerates from scratch, so strip them here.
+            for f in *.aux; do
+              [ -e "$f" ] && sed -i '/\\newlabel{tocindent/d' "$f"
+            done
+            # Sanity check: carried-forward artifacts must actually be present.
+            have=$(ls -1 *.pdf 2>/dev/null | wc -l)
+            expect=$(git ls-tree -r "origin/$DEPLOY_BRANCH" --name-only | grep -c '\.pdf$')
+            echo "carried forward $have pdfs ($DEPLOY_BRANCH has $expect)"
+            if [ "$have" -lt "$expect" ]; then
+              echo "::error::Carry-forward incomplete: $have pdfs present, $DEPLOY_BRANCH has $expect"
+              exit 1
+            fi
+          else
+            echo "No existing $DEPLOY_BRANCH branch; starting first deploy snapshot."
+          fi
+
+      - name: Install TeX Live (cached)
+        uses: TeX-Live/setup-texlive-action@v4
+        with:
+          # Pin if you need bit-for-bit parity with an older local toolchain.
+          version: 2025
+          packages: |
+            scheme-basic
+            collection-latex
+            collection-latexextra
+            collection-latexrecommended
+            collection-mathscience
+            collection-fontsrecommended
+            collection-publishers
+            latexmk
+            cm-super
+            navigator
+            texapi
+            yax
+
+      - name: Install pandoc and jq
+        run: sudo apt-get update && sudo apt-get install -y pandoc jq
+
+      - uses: purcell/setup-emacs@master
+        with:
+          version: 29.4
+
+      - name: Determine files to build
+        id: plan
+        run: |
+          EXCLUDE=$(jq -r '.exclude[]' config.json)
+          ALL=$(git ls-files '*.tex' | grep -vFxf <(printf '%s\n' "$EXCLUDE") || true)
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" = "main" ]; then
+            CHANGED=$(git diff --name-only --diff-filter=d "${{ github.event.before }}" "${{ github.event.after }}" -- '*.tex' '*.bib' || true)
+            FILES=""
+            for c in $CHANGED; do
+              # the changed file itself, if it's a buildable document
+              if printf '%s\n' "$ALL" | grep -qFx "$c"; then
+                FILES="$FILES $c"
+              fi
+              # plus any document referencing it: multifile docs (\input{foo-body}),
+              # shared preambles (common.tex), bibliographies (refs.bib).
+              # Match the braced form "{stem}" so prose mentions don't count.
+              stem=$(basename "${c%.*}")
+              DEPS=$(grep -lF "{$stem}" $ALL </dev/null || true)
+              FILES="$FILES $DEPS"
+            done
+            FILES=$(printf '%s\n' $FILES | sort -u)
+          elif [ "${{ inputs.rebuild_all }}" = "true" ]; then
+            FILES="$ALL"
+          else
+            # Dispatch default: only build files whose pdf is missing.
+            FILES=$(for f in $ALL; do [ -f "${f%.tex}.pdf" ] || echo "$f"; done)
+          fi
+          FILES="$FILES ${FORCE_REBUILD:-}"
+          echo "Files to build:"
+          echo "$FILES"
+          printf '%s\n' $FILES > /tmp/files-to-build.txt
+
+      - name: Compile and convert
+        run: |
+          # Delete every to-be-rebuilt file's aux UP FRONT: stale aux from an
+          # older toolchain is fatal when another document reads it via xr.
+          # A missing aux is only a warning; a stale one can be a hard error.
+          while read -r f; do
+            [ -z "$f" ] || rm -f "${f%.tex}.aux"
+          done < /tmp/files-to-build.txt
+          # Strip amsart tocindent labels from sibling auxes before each
+          # compile (they poison xr importers; see carry-forward step).
+          # Freshly built notes re-emit them, hence per-file, not one-shot.
+          strip_tocindent() {
+            for a in *.aux; do
+              [ -e "$a" ] && sed -i '/\\newlabel{tocindent/d' "$a"
+            done
+          }
+          FAILED=""
+          while read -r f; do
+            [ -z "$f" ] && continue
+            strip_tocindent
+            # </dev/null: latexmk/pandoc must not eat the file list on stdin
+            if ./compile.sh "$f" </dev/null && ./convert.sh "$f" </dev/null; then
+              echo "OK: $f"
+            else
+              FAILED="$FAILED $f"
+              echo "FAILED: $f (will retry)"
+            fi
+          done < /tmp/files-to-build.txt
+          # Retry once: cross-document references (xr) can require aux files
+          # that only exist after the referenced document compiled above.
+          RETRY="$FAILED"
+          FAILED=""
+          for f in $RETRY; do
+            strip_tocindent
+            if ./compile.sh "$f" </dev/null && ./convert.sh "$f" </dev/null; then
+              echo "OK on retry: $f"
+            else
+              FAILED="$FAILED $f"
+              echo "FAILED: $f (restoring previous artifacts if any)"
+              rm -f "${f%.tex}.pdf" "${f%.tex}.html"
+              git restore --overlay --source="origin/$DEPLOY_BRANCH" -- "${f%.tex}.pdf" 2>/dev/null || true
+              git restore --overlay --source="origin/$DEPLOY_BRANCH" -- "${f%.tex}.html" 2>/dev/null || true
+              # Deliberately do NOT restore the old aux: absent is a warning
+              # for referencing documents, stale can be a hard error.
+            fi
+          done
+          for f in $FAILED; do echo "$f"; done > /tmp/failed.txt
+
+      - name: Push deploy snapshot
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git checkout -B "$DEPLOY_BRANCH"
+          git add -f -- '*.pdf' '*.html' '*.aux' || true
+          git add -f -- listing.json || true
+          git commit -m "Deploy snapshot from ${GITHUB_SHA}" || echo "No changes to commit"
+          git push -f origin "$DEPLOY_BRANCH"
+
+      - name: Report failures
+        run: |
+          if [ -s /tmp/failed.txt ]; then
+            echo "## Failed compiles" >> "$GITHUB_STEP_SUMMARY"
+            sed 's/^/- /' /tmp/failed.txt >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Some files failed to compile: $(cat /tmp/failed.txt | tr '\n' ' ')"
+            exit 1
+          fi

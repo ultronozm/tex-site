@@ -1,0 +1,31 @@
+{
+  "exclude": [
+    "common.tex"
+  ],
+  "boxed-environments": [
+    "theorem",
+    "lemma",
+    "proposition",
+    "definition",
+    "exercise",
+    "example",
+    "hypothesis",
+    "corollary",
+    "remark",
+    "notation",
+    "note",
+    "problem",
+    "question",
+    "answer",
+    "criterion",
+    "summary"
+  ],
+  "site": {
+    "title": "TeX notes",
+    "author": "",
+    "email": "",
+    "githubRepository": "",
+    "sourceBranch": "main",
+    "commentsScript": ""
+  }
+}
