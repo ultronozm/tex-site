@@ -1,0 +1,33 @@
+\documentclass[reqno]{amsart}
+\usepackage{amsmath,amssymb}
+
+\newtheorem{theorem}{Theorem}
+
+\begin{document}
+
+\title{Sample TeX Note}
+\author{tex-site}
+
+\begin{abstract}
+  A small note used to verify that the default tex-site workflow renders
+  PDF, HTML, and index entries.
+\end{abstract}
+
+\maketitle
+
+\section{A First Calculation}
+
+This file is intentionally small.  It gives a fresh copy of the repository a
+publishable note immediately, and it exercises the same build path used by
+downstream sites.
+
+\begin{theorem}
+  For every integer \(n\), the number \(n^2 - n\) is even.
+\end{theorem}
+
+\begin{proof}
+  We have \(n^2 - n = n(n-1)\), the product of two consecutive integers.
+  One of those integers is even.
+\end{proof}
+
+\end{document}

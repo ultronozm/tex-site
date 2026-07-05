@@ -8,6 +8,9 @@ as an upstream parent.  The parent owns the build/conversion machinery; the
 child owns notes, images, bibliographies, local preambles, and site-specific
 index organization.
 
+The parent repository itself is also buildable: it includes `sample.tex`, so a
+fresh copy renders a PDF, an HTML note, and an index entry immediately.
+
 ## What This Provides
 
 - GitHub Actions snapshot deployment to a `deploy` branch.
@@ -24,8 +27,8 @@ index organization.
 1. Fork or otherwise copy this repository into a notes repository.
 2. Keep this repository as an `upstream` remote so machinery changes can be
    merged later.
-3. Add notes as top-level `*.tex` or `*.org` files.  `index.org` is reserved
-   for the site index template.
+3. Replace or delete `sample.tex`, then add notes as top-level `*.tex` or
+   `*.org` files.  `index.org` is reserved for the site index template.
 4. Put top-level non-standalone TeX inputs in `config.json` under `exclude`.
    TeX files in subdirectories are not treated as publishable notes by
    default.

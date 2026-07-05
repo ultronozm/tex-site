@@ -1,7 +1,5 @@
 {
-  "exclude": [
-    "common.tex"
-  ],
+  "exclude": [],
   "boxed-environments": [
     "theorem",
     "lemma",
