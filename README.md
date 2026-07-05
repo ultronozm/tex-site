@@ -74,6 +74,11 @@ The `build` workflow reconstructs the deploy branch as a snapshot:
 The force-push is deliberate: the deploy branch is generated state, not
 history.  Permanent URLs are preserved because paths are stable.
 
+For safe trials, dispatch the `build` workflow manually with
+`deploy_branch=deploy-test`, then dispatch `make-index` with the same
+`deploy_branch`.  This exercises the snapshot branch without changing the
+live Pages branch.
+
 ## Known Tradeoffs
 
 - TeX Live is pinned to 2025 in the default workflow.  Downstream sites can
